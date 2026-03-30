@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PDF Ticket Filler</title>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+  <script type="module">
+    import * as pdfjsLib from "https://cdn.jsdelivr.net/npm/pdfjs-dist@5.6.205/legacy/build/pdf.mjs";
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      "https://cdn.jsdelivr.net/npm/pdfjs-dist@5.6.205/legacy/build/pdf.worker.mjs";
+    window.pdfjsLib = pdfjsLib;
+  </script>
+
+  <style>
+    :root {
+      --bg: #0f1115;
+      --panel: #171a21;
+      --panel-2: #1e2430;
+      --text: #e8edf5;
+      --muted: #9aa4b2;
+      --border: #2c3444;
+      --accent: #4f8cff;
+      --accent-hover: #3d78e6;
+      --danger: #ff6b6b;
+      --success: #35c759;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .app {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 380px 1fr;
+    }
+
+    .sidebar {
+      border-right: 1px solid var(--border);
+      background: var(--panel);
+      padding: 20px;
+      overflow-y: auto;
+    }
+
+    .content {
+      padding: 20px;
+      overflow-y: auto;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 24px;
+    }
+
+    .sub {
+      margin: 0 0 20px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .group {
+      margin-bottom: 16px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    input {
+      width: 100%;
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+      color: var(--text);
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-size: 14px;
+      outline: none;
+    }
+
+    input:focus {
+      border-color: var(--accent);
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      appearance: none;
+      border: 0;
+      border-radius: 10px;
+      padding: 12px 16px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .primary {
+      background: var(--accent);
+      color: white;
+    }
+
+    .primary:hover {
+      background: var(--accent-hover);
+    }
+
+    .secondary {
+      background: #2a3140;
+      color: var(--text);
+    }
+
+    .secondary:hover {
+      background: #333c4e;
+    }
+
+    .secondary:disabled,
+    .primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .status {
+      margin-top: 14px;
+      font-size: 13px;
+      color: var(--muted);
+      min-height: 20px;
+    }
+
+    .status.error {
+      color: var(--danger);
+    }
+
+    .status.success {
+      color: var(--success);
+    }
+
+    .preview-wrap {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 16px;
+      min-height: calc(100vh - 40px);
+    }
+
+    .preview-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+
+    .preview-title {
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    .preview-note {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    #previewContainer {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      align-items: center;
+      padding: 10px 0 30px;
+    }
+
+    .pdf-page {
+      width: min(100%, 900px);
+      background: white;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+    }
+
+    .pdf-page canvas {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .hint {
+      margin-top: 18px;
+      padding: 12px 14px;
+      background: #121721;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      color: #cdd9ff;
+    }
+
+    @media (max-width: 960px) {
+      .app {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar {
+        border-right: 0;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .preview-wrap {
+        min-height: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <h1>PDF Ticket Filler</h1>
+      <p class="sub">
+        Fill in the fields, generate the PDF, preview it, then download.
+      </p>
+
+      <form id="ticketForm">
+        <div class="group">
+          <label for="name">Name</label>
+          <input id="name" name="name" type="text" value="Razel Estrella" placeholder="Razel Estrella" />
+        </div>
+
+        <div class="group">
+          <label for="orderNumber">Order number</label>
+          <input id="orderNumber" name="orderNumber" type="text" value="20261478" placeholder="20261478" />
+        </div>
+
+        <div class="group">
+          <label for="ticketNumber">Ticket number</label>
+          <input id="ticketNumber" name="ticketNumber" type="text" value="VTS095" placeholder="VTS095" />
+        </div>
+
+        <div class="group">
+          <label for="ticketPrice">Ticket price</label>
+          <input id="ticketPrice" name="ticketPrice" type="text" value="2,500 PHP" placeholder="2,500 PHP" />
+        </div>
+
+        <div class="group">
+          <label for="section">Section</label>
+          <input id="section" name="section" type="text" value="Rear Right" placeholder="Rear Right" />
+        </div>
+
+        <div class="row">
+          <div class="group">
+            <label for="row">Row</label>
+            <input id="row" name="row" type="text" value="4" placeholder="4" />
+          </div>
+
+          <div class="group">
+            <label for="seat">Seat</label>
+            <input id="seat" name="seat" type="text" value="18B" placeholder="18B" />
+          </div>
+        </div>
+
+        <div class="actions">
+          <button type="submit" class="primary" id="generateBtn">Generate Preview</button>
+          <button type="button" class="secondary" id="downloadBtn" disabled>Download PDF</button>
+        </div>
+
+        <div id="status" class="status"></div>
+      </form>
+
+      <div class="hint">
+        Template path is set to <code>assets/template.pdf</code>.<br><br>
+        Serve this folder over <code>http://localhost</code> so the app can fetch the template
+        and render the preview immediately.<br><br>
+        If anything is slightly off, only adjust the coordinates inside
+        <code>FIELD_POSITIONS</code>.
+      </div>
+    </aside>
+
+    <main class="content">
+      <div class="preview-wrap">
+        <div class="preview-header">
+          <div>
+            <div class="preview-title">Preview</div>
+            <div class="preview-note">Generated PDF pages will appear here.</div>
+          </div>
+        </div>
+
+        <div id="previewContainer"></div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const TEMPLATE_PATH = "assets/template.pdf";
+
+    // Coordinates based on your provided template/sample.
+    // PDF coordinate origin is bottom-left.
+    const FIELD_POSITIONS = {
+      name: {
+        page: 0,
+        x: 60,
+        y: 955,
+        size: 14,
+        maxWidth: 250,
+      },
+      orderNumber: {
+        page: 0,
+        x: 60,
+        y: 855,
+        size: 14,
+        maxWidth: 220,
+      },
+      ticketNumber: {
+        page: 0,
+        x: 445,
+        y: 770,
+        size: 12,
+        maxWidth: 120,
+      },
+      ticketPrice: {
+        page: 0,
+        x: 52,
+        y: 630,
+        size: 17,
+        maxWidth: 150,
+      },
+      section: {
+        page: 0,
+        x: 215,
+        y: 630,
+        size: 17,
+        maxWidth: 130,
+      },
+      row: {
+        page: 0,
+        x: 368,
+        y: 630,
+        size: 17,
+        maxWidth: 60,
+      },
+      seat: {
+        page: 0,
+        x: 485,
+        y: 630,
+        size: 17,
+        maxWidth: 80,
+      },
+    };
+
+    const form = document.getElementById("ticketForm");
+    const statusEl = document.getElementById("status");
+    const previewContainer = document.getElementById("previewContainer");
+    const downloadBtn = document.getElementById("downloadBtn");
+    const generateBtn = document.getElementById("generateBtn");
+
+    let latestPdfBytes = null;
+    let cachedTemplateBytes = null;
+
+    function setStatus(message, type = "") {
+      statusEl.textContent = message;
+      statusEl.className = "status";
+      if (type) statusEl.classList.add(type);
+    }
+
+    function clearPreview() {
+      previewContainer.innerHTML = "";
+    }
+
+    function clonePdfBytes(pdfBytes) {
+      return pdfBytes instanceof Uint8Array ? pdfBytes.slice() : new Uint8Array(pdfBytes);
+    }
+
+    function normalizeTicketNumber(value) {
+      const trimmed = String(value || "").trim();
+      if (!trimmed) return "";
+      return trimmed.startsWith("#") ? trimmed : `#${trimmed}`;
+    }
+
+    function getFormData() {
+      const fd = new FormData(form);
+      return {
+        name: String(fd.get("name") || "").trim(),
+        orderNumber: String(fd.get("orderNumber") || "").trim(),
+        ticketNumber: normalizeTicketNumber(fd.get("ticketNumber")),
+        ticketPrice: String(fd.get("ticketPrice") || "").trim(),
+        section: String(fd.get("section") || "").trim(),
+        row: String(fd.get("row") || "").trim(),
+        seat: String(fd.get("seat") || "").trim(),
+      };
+    }
+
+    async function loadTemplatePdfBytes() {
+      if (cachedTemplateBytes) {
+        return cachedTemplateBytes.slice(0);
+      }
+
+      const res = await fetch(TEMPLATE_PATH);
+      if (!res.ok) {
+        throw new Error(`Could not load template PDF at ${TEMPLATE_PATH}. Serve this folder over http://localhost.`);
+      }
+
+      cachedTemplateBytes = await res.arrayBuffer();
+      return cachedTemplateBytes.slice(0);
+    }
+
+    async function generatePdf(data) {
+      const existingPdfBytes = await loadTemplatePdfBytes();
+      const pdfDoc = await PDFLib.PDFDocument.load(existingPdfBytes);
+
+      const pages = pdfDoc.getPages();
+      const regularFont = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
+      const boldFont = await pdfDoc.embedFont(PDFLib.StandardFonts.HelveticaBold);
+
+      const boldFields = new Set([
+        "name",
+        "orderNumber",
+        "ticketPrice",
+        "section",
+        "row",
+        "seat",
+      ]);
+
+      for (const [field, value] of Object.entries(data)) {
+        const config = FIELD_POSITIONS[field];
+        if (!config || !value) continue;
+
+        const page = pages[config.page || 0];
+        if (!page) continue;
+
+        page.drawText(String(value), {
+          x: config.x,
+          y: config.y,
+          size: config.size || 12,
+          font: boldFields.has(field) ? boldFont : regularFont,
+          color: PDFLib.rgb(0, 0, 0),
+          maxWidth: config.maxWidth || undefined,
+          lineHeight: config.lineHeight || undefined,
+        });
+      }
+
+      return await pdfDoc.save();
+    }
+
+    async function renderPdfPreview(pdfBytes) {
+      clearPreview();
+      const previewBytes = clonePdfBytes(pdfBytes);
+
+      const loadingTask = window.pdfjsLib.getDocument({
+        data: previewBytes
+      });
+
+      const pdf = await loadingTask.promise;
+
+      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+        const page = await pdf.getPage(pageNum);
+        const viewport = page.getViewport({ scale: 1.6 });
+
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d");
+
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+
+        const wrapper = document.createElement("div");
+        wrapper.className = "pdf-page";
+        wrapper.appendChild(canvas);
+
+        previewContainer.appendChild(wrapper);
+
+        await page.render({
+          canvasContext: context,
+          viewport
+        }).promise;
+      }
+    }
+
+    async function showTemplatePreview() {
+      generateBtn.disabled = true;
+      downloadBtn.disabled = true;
+      latestPdfBytes = null;
+      setStatus("Loading template preview...");
+
+      try {
+        const templateBytes = await loadTemplatePdfBytes();
+        await renderPdfPreview(templateBytes);
+        setStatus("Template preview loaded.");
+      } catch (err) {
+        console.error(err);
+        clearPreview();
+        setStatus(err.message || "Could not load the template preview.", "error");
+      } finally {
+        generateBtn.disabled = false;
+      }
+    }
+
+    function enableDownload(pdfBytes) {
+      latestPdfBytes = clonePdfBytes(pdfBytes);
+      downloadBtn.disabled = false;
+    }
+
+    function downloadLatestPdf() {
+      if (!latestPdfBytes) return;
+
+      const blob = new Blob([latestPdfBytes], { type: "application/pdf" });
+      const blobUrl = URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = "generated-ticket.pdf";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 0);
+    }
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      generateBtn.disabled = true;
+      downloadBtn.disabled = true;
+      clearPreview();
+      setStatus("Generating PDF preview...");
+
+      try {
+        const data = getFormData();
+        const pdfBytes = await generatePdf(data);
+        enableDownload(pdfBytes);
+        await renderPdfPreview(pdfBytes);
+        setStatus("Preview generated successfully.", "success");
+      } catch (err) {
+        console.error(err);
+        setStatus(err.message || "Something went wrong while generating the PDF.", "error");
+      } finally {
+        generateBtn.disabled = false;
+      }
+    });
+
+    downloadBtn.addEventListener("click", downloadLatestPdf);
+    showTemplatePreview();
+  </script>
+</body>
+</html>
